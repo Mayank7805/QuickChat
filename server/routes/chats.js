@@ -34,7 +34,22 @@ router.post('/create', auth, async (req, res) => {
       await chat.populate('participants', 'username displayName avatar status');
     }
 
-    res.json({ chat });
+    // Format response to match frontend expectations
+    const otherParticipant = chat.participants.find(p => p._id.toString() !== req.user.id);
+    
+    const formattedChat = {
+      _id: chat._id,
+      participants: chat.participants,
+      messages: [],
+      friend: {
+        _id: otherParticipant._id,
+        username: otherParticipant.username,
+        displayName: otherParticipant.displayName,
+        status: otherParticipant.status || 'offline'
+      }
+    };
+
+    res.json({ chat: formattedChat });
   } catch (error) {
     console.error('Create chat error:', error);
     res.status(500).json({ message: 'Server error' });
@@ -51,20 +66,44 @@ router.get('/list', auth, async (req, res) => {
     .populate('lastMessage')
     .sort({ updatedAt: -1 });
 
+    // Remove duplicates: Keep only the most recent chat between same participants
+    const seenPairs = new Map();
+    const uniqueChats = [];
+    
+    for (const chat of chats) {
+      const otherParticipant = chat.participants.find(p => p._id.toString() !== req.user.id);
+      
+      if (!otherParticipant) continue;
+      
+      const pairKey = [req.user.id, otherParticipant._id.toString()].sort().join('_');
+      
+      if (!seenPairs.has(pairKey)) {
+        seenPairs.set(pairKey, true);
+        uniqueChats.push(chat);
+      } else {
+        // Delete duplicate chat from database
+        await Chat.findByIdAndDelete(chat._id);
+        console.log(`Deleted duplicate chat: ${chat._id}`);
+      }
+    }
+
     // Format chats for frontend
-    const formattedChats = chats.map(chat => {
+    const formattedChats = uniqueChats.map(chat => {
       const otherParticipant = chat.participants.find(p => p._id.toString() !== req.user.id);
       
       return {
         _id: chat._id,
-        name: chat.type === 'direct' ? otherParticipant.displayName : chat.name,
-        avatar: chat.type === 'direct' ? otherParticipant.avatar : chat.avatar,
-        type: chat.type,
         participants: chat.participants,
+        messages: [],
+        friend: {
+          _id: otherParticipant._id,
+          username: otherParticipant.username,
+          displayName: otherParticipant.displayName,
+          status: otherParticipant.status || 'offline'
+        },
         lastMessage: chat.lastMessage,
         lastActivity: chat.updatedAt,
-        unreadCount: 0, // TODO: Implement unread count
-        isOnline: otherParticipant.status === 'online'
+        unreadCount: 0 // TODO: Implement unread count
       };
     });
 
@@ -93,7 +132,16 @@ router.get('/:chatId/messages', auth, async (req, res) => {
       .limit(limit * 1)
       .skip((page - 1) * limit);
 
-    res.json({ messages: messages.reverse() }); // Reverse to show oldest first
+    // Format messages for frontend
+    const formattedMessages = messages.reverse().map(msg => ({
+      _id: msg._id,
+      sender: msg.sender._id,
+      content: msg.content,
+      timestamp: msg.createdAt,
+      type: msg.type || 'text'
+    }));
+
+    res.json({ messages: formattedMessages });
   } catch (error) {
     console.error('Get messages error:', error);
     res.status(500).json({ message: 'Server error' });
@@ -128,24 +176,29 @@ router.post('/:chatId/messages', auth, async (req, res) => {
     chat.updatedAt = new Date();
     await chat.save();
 
+    // Format message for response
+    const formattedMessage = {
+      _id: message._id,
+      sender: message.sender._id,
+      content: message.content,
+      timestamp: message.createdAt,
+      type: message.type || 'text'
+    };
+
     // Emit real-time message to other participants
     const io = req.app.get('io');
     chat.participants.forEach(participantId => {
       if (participantId.toString() !== req.user.id) {
         io.to(`user_${participantId}`).emit('new_message', {
           chatId,
-          message: {
-            _id: message._id,
-            content: message.content,
-            type: message.type,
-            sender: message.sender,
-            createdAt: message.createdAt
-          }
+          message: formattedMessage,
+          senderName: message.sender.displayName || message.sender.username,
+          senderId: message.sender._id
         });
       }
     });
 
-    res.json({ message });
+    res.json({ message: formattedMessage });
   } catch (error) {
     console.error('Send message error:', error);
     res.status(500).json({ message: 'Server error' });

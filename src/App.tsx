@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import Login from './pages/Login';
 import Register from './pages/Register';
 import Chat from './pages/Chat';
@@ -6,21 +6,34 @@ import ChatTest from './pages/ChatTest';
 
 type Page = 'login' | 'register' | 'chat' | 'test';
 
+interface User {
+  id: string;
+  username: string;
+  displayName: string;
+}
+
 function App() {
-  const [currentPage, setCurrentPage] = useState<Page>('test'); // Changed to show test
-  const [user, setUser] = useState(null);
+  const [currentPage, setCurrentPage] = useState<Page>('login');
+  const [user, setUser] = useState<User | null>(null);
 
   useEffect(() => {
     const token = localStorage.getItem('token');
     const userData = localStorage.getItem('user');
     
     if (token && userData) {
-      setUser(JSON.parse(userData));
-      // setCurrentPage('chat'); // Commented out to show test
+      try {
+        const parsedUser = JSON.parse(userData);
+        setUser(parsedUser);
+        setCurrentPage('chat');
+      } catch (error) {
+        console.error('Error parsing user data:', error);
+        localStorage.removeItem('token');
+        localStorage.removeItem('user');
+      }
     }
   }, []);
 
-  const handleLogin = (token: string, userData: any) => {
+  const handleLogin = (token: string, userData: User) => {
     localStorage.setItem('token', token);
     localStorage.setItem('user', JSON.stringify(userData));
     setUser(userData);
@@ -53,7 +66,7 @@ function App() {
           />
         );
       case 'chat':
-        return <Chat user={user} onLogout={handleLogout} />;
+        return user ? <Chat user={user} onLogout={handleLogout} /> : <Login onLogin={handleLogin} onSwitchToRegister={() => setCurrentPage('register')} />;
       default:
         return <Login onLogin={handleLogin} onSwitchToRegister={() => setCurrentPage('register')} />;
     }
@@ -62,40 +75,6 @@ function App() {
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100">
       {renderPage()}
-      
-      {/* Navigation for testing */}
-      <div style={{ 
-        position: 'fixed', 
-        bottom: '20px', 
-        right: '20px', 
-        display: 'flex', 
-        gap: '10px' 
-      }}>
-        <button
-          onClick={() => setCurrentPage('test')}
-          style={{ 
-            padding: '10px', 
-            backgroundColor: '#28a745', 
-            color: 'white', 
-            border: 'none', 
-            borderRadius: '5px' 
-          }}
-        >
-          Test Chat Buttons
-        </button>
-        <button
-          onClick={() => setCurrentPage('login')}
-          style={{ 
-            padding: '10px', 
-            backgroundColor: '#007bff', 
-            color: 'white', 
-            border: 'none', 
-            borderRadius: '5px' 
-          }}
-        >
-          Go to Login
-        </button>
-      </div>
     </div>
   );
 }

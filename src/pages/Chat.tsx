@@ -37,6 +37,9 @@ const Chat: React.FC<ChatProps> = ({ user, onLogout }) => {
   const [messageInput, setMessageInput] = useState('');
   const [messages, setMessages] = useState<Message[]>([]);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  
+  // Unread messages tracking: { chatId: count }
+  const [unreadMessages, setUnreadMessages] = useState<Record<string, number>>({});
 
   useEffect(() => {
     loadFriends();
@@ -55,9 +58,24 @@ const Chat: React.FC<ChatProps> = ({ user, onLogout }) => {
   const loadChats = async () => {
     try {
       const response = await chatsAPI.getChats();
-      setChats(response.chats || []);
+      console.log('Loaded chats:', response);
+      
+      // Remove duplicates based on chat ID AND friend ID (double protection)
+      const uniqueChats = response.chats?.filter((chat: ChatData, index: number, self: ChatData[]) => {
+        // First filter by chat ID
+        const firstIndexById = self.findIndex((c) => c._id === chat._id);
+        if (index !== firstIndexById) return false;
+        
+        // Second filter by friend ID (in case same friend has multiple chats)
+        const firstIndexByFriend = self.findIndex((c) => c.friend._id === chat.friend._id);
+        return index === firstIndexByFriend;
+      }) || [];
+      
+      console.log('Unique chats after filtering:', uniqueChats);
+      setChats(uniqueChats);
     } catch (error: unknown) {
       console.error('Error loading chats:', error instanceof Error ? error.message : String(error));
+      setNotifications(prev => [...prev, 'Failed to load chats']);
     }
   };
 
@@ -82,6 +100,12 @@ const Chat: React.FC<ChatProps> = ({ user, onLogout }) => {
     });
 
     newSocket.on('new_message', (data) => {
+      console.log('New message received:', data);
+      
+      // Get sender information
+      const senderId = data.message.sender;
+      const senderName = data.senderName || 'Someone';
+      
       // Only add the message if it's not already in the messages array
       setMessages(prev => {
         const messageExists = prev.some(msg => msg._id === data.message._id);
@@ -94,7 +118,46 @@ const Chat: React.FC<ChatProps> = ({ user, onLogout }) => {
         }
         return prev;
       });
-      scrollToBottom();
+      
+      // Update unread count if message is not from current user and not in active chat
+      if (senderId !== user.id) {
+        const chatId = data.chatId || data.message.chat;
+        
+        // Check if this message is in the currently active chat
+        setActiveChat(currentActiveChat => {
+          if (currentActiveChat && currentActiveChat._id === chatId) {
+            // User is viewing this chat, just scroll to bottom
+            scrollToBottom();
+            return currentActiveChat;
+          } else {
+            // User is not viewing this chat, increment unread count
+            setUnreadMessages(prev => ({
+              ...prev,
+              [chatId]: (prev[chatId] || 0) + 1
+            }));
+            
+            // Show notification
+            setNotifications(prev => [...prev, `New message from ${senderName}`]);
+            
+            // Update the chat's last message in the chats list
+            setChats(prevChats => {
+              return prevChats.map(chat => {
+                if (chat._id === chatId) {
+                  return {
+                    ...chat,
+                    lastMessage: data.message
+                  };
+                }
+                return chat;
+              });
+            });
+            
+            return currentActiveChat;
+          }
+        });
+      } else {
+        scrollToBottom();
+      }
     });
 
     setSocket(newSocket);
@@ -111,7 +174,37 @@ const Chat: React.FC<ChatProps> = ({ user, onLogout }) => {
 
   const startChat = async (friend: Friend) => {
     try {
+      // First check if chat already exists in the chats list
+      const existingChat = chats.find(chat => 
+        chat.friend._id === friend._id
+      );
+      
+      if (existingChat) {
+        // Chat already exists, just open it
+        console.log('Opening existing chat:', existingChat);
+        
+        // Clear unread messages for this chat
+        setUnreadMessages(prev => {
+          const updated = { ...prev };
+          delete updated[existingChat._id];
+          return updated;
+        });
+        
+        setActiveChat(existingChat);
+        setActiveView('messaging');
+        
+        // Load messages for this chat
+        const messagesResponse = await chatsAPI.getChatMessages(existingChat._id);
+        setMessages(messagesResponse.messages || []);
+        
+        setTimeout(scrollToBottom, 100);
+        return;
+      }
+      
+      // Create new chat if it doesn't exist
       const response = await chatsAPI.createChat(friend._id);
+      console.log('Chat created:', response);
+      
       const chatData: ChatData = {
         _id: response.chat._id,
         participants: response.chat.participants,
@@ -119,15 +212,26 @@ const Chat: React.FC<ChatProps> = ({ user, onLogout }) => {
         friend: friend
       };
       
+      // Reload chats to get fresh list from server (removes duplicates)
+      await loadChats();
+      
+      // Clear unread messages for this chat
+      setUnreadMessages(prev => {
+        const updated = { ...prev };
+        delete updated[chatData._id];
+        return updated;
+      });
+      
       setActiveChat(chatData);
       setActiveView('messaging');
       
-      // Load messages for this chat
+      // Load messages for this chat (will be empty for new chat)
       const messagesResponse = await chatsAPI.getChatMessages(response.chat._id);
       setMessages(messagesResponse.messages || []);
       
       setTimeout(scrollToBottom, 100);
     } catch (error: unknown) {
+      console.error('Error starting chat:', error);
       const errorMessage = typeof error === 'object' && error !== null && 'message' in error
         ? (error as { message?: string }).message
         : 'Failed to start chat';
@@ -263,18 +367,29 @@ const Chat: React.FC<ChatProps> = ({ user, onLogout }) => {
               { key: 'chats', label: 'Chats', icon: MessageCircle },
               { key: 'friends', label: 'Friends', icon: Users },
               { key: 'search', label: 'Search', icon: Search }
-            ].map(({ key, label, icon: Icon }) => (
-              <button
-                key={key}
-                onClick={() => setActiveView(key as ViewType)}
-                className={`flex-1 flex items-center justify-center space-x-2 px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
-                  activeView === key ? 'bg-blue-100 text-blue-600' : 'text-gray-600 hover:bg-gray-100'
-                }`}
-              >
-                <Icon className="h-4 w-4" />
-                <span>{label}</span>
-              </button>
-            ))}
+            ].map(({ key, label, icon: Icon }) => {
+              // Calculate total unread messages
+              const totalUnread = Object.values(unreadMessages).reduce((sum, count) => sum + count, 0);
+              const showBadge = key === 'chats' && totalUnread > 0;
+              
+              return (
+                <button
+                  key={key}
+                  onClick={() => setActiveView(key as ViewType)}
+                  className={`relative flex-1 flex items-center justify-center space-x-2 px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
+                    activeView === key ? 'bg-blue-100 text-blue-600' : 'text-gray-600 hover:bg-gray-100'
+                  }`}
+                >
+                  <Icon className="h-4 w-4" />
+                  <span>{label}</span>
+                  {showBadge && (
+                    <span className="absolute -top-1 -right-1 bg-red-500 text-white text-xs font-bold rounded-full h-5 w-5 flex items-center justify-center">
+                      {totalUnread > 9 ? '9+' : totalUnread}
+                    </span>
+                  )}
+                </button>
+              );
+            })}
           </div>
         </div>
 
@@ -454,40 +569,89 @@ const Chat: React.FC<ChatProps> = ({ user, onLogout }) => {
 
           {activeView === 'chats' && (
             <div>
-              <h2 className="font-semibold text-gray-900 mb-4">Your Chats</h2>
+              <div className="flex items-center justify-between mb-4">
+                <h2 className="font-semibold text-gray-900">Your Chats ({chats.length})</h2>
+                <button
+                  onClick={() => loadChats()}
+                  className="text-sm text-blue-600 hover:text-blue-700"
+                  title="Refresh chats"
+                >
+                  Refresh
+                </button>
+              </div>
               {chats.length > 0 ? (
                 <div className="space-y-2">
-                  {chats.map((chat) => (
-                    <div
-                      key={chat._id}
-                      onClick={() => {
-                        setActiveChat(chat);
-                        setActiveView('messaging');
-                        chatsAPI.getChatMessages(chat._id)
-                          .then((response: { messages: Message[] }) => {
-                            setMessages(response.messages || []);
-                            setTimeout(scrollToBottom, 100);
+                  {chats.map((chat) => {
+                    const unreadCount = unreadMessages[chat._id] || 0;
+                    
+                    return (
+                      <div
+                        key={chat._id}
+                        onClick={() => {
+                          // Clear unread messages for this chat
+                          setUnreadMessages(prev => {
+                            const updated = { ...prev };
+                            delete updated[chat._id];
+                            return updated;
                           });
-                      }}
-                      className="flex items-center space-x-3 p-3 bg-white border border-gray-200 rounded-lg hover:bg-gray-50 cursor-pointer"
-                    >
-                      <div className="relative">
-                        <div className="w-10 h-10 bg-gradient-to-r from-purple-400 to-blue-400 rounded-full flex items-center justify-center text-white font-semibold">
-                          {chat.friend.displayName?.[0]?.toUpperCase() || chat.friend.username?.[0]?.toUpperCase() || 'U'}
+                          
+                          setActiveChat(chat);
+                          setActiveView('messaging');
+                          chatsAPI.getChatMessages(chat._id)
+                            .then((response: { messages: Message[] }) => {
+                              setMessages(response.messages || []);
+                              setTimeout(scrollToBottom, 100);
+                            })
+                            .catch((error) => {
+                              console.error('Error loading messages:', error);
+                              setNotifications(prev => [...prev, 'Failed to load messages']);
+                            });
+                        }}
+                        className={`flex items-center space-x-3 p-3 border rounded-lg hover:bg-gray-50 cursor-pointer transition-colors ${
+                          unreadCount > 0 ? 'bg-blue-50 border-blue-200' : 'bg-white border-gray-200'
+                        }`}
+                      >
+                        <div className="relative">
+                          <div className="w-10 h-10 bg-gradient-to-r from-purple-400 to-blue-400 rounded-full flex items-center justify-center text-white font-semibold">
+                            {chat.friend.displayName?.[0]?.toUpperCase() || chat.friend.username?.[0]?.toUpperCase() || 'U'}
+                          </div>
+                          <div className={`absolute -bottom-0.5 -right-0.5 w-3 h-3 rounded-full border-2 border-white ${chat.friend.status === 'online' ? 'bg-green-500' : 'bg-gray-400'}`}></div>
+                          {unreadCount > 0 && (
+                            <div className="absolute -top-1 -right-1 bg-red-500 text-white text-xs font-bold rounded-full h-5 w-5 flex items-center justify-center">
+                              {unreadCount > 9 ? '9+' : unreadCount}
+                            </div>
+                          )}
                         </div>
-                        <div className={`absolute -bottom-0.5 -right-0.5 w-3 h-3 rounded-full border-2 border-white ${chat.friend.status === 'online' ? 'bg-green-500' : 'bg-gray-400'}`}></div>
+                        <div className="flex-1">
+                          <div className="flex items-center justify-between">
+                            <p className={`font-medium ${unreadCount > 0 ? 'text-gray-900' : 'text-gray-900'}`}>
+                              {chat.friend.displayName || chat.friend.username}
+                            </p>
+                            {unreadCount > 0 && (
+                              <span className="text-xs font-semibold text-red-500">
+                                {unreadCount} new
+                              </span>
+                            )}
+                          </div>
+                          <p className="text-sm text-gray-500">
+                            {unreadCount > 0 ? 'New messages' : 'Click to open chat'}
+                          </p>
+                        </div>
                       </div>
-                      <div>
-                        <p className="font-medium text-gray-900">{chat.friend.displayName || chat.friend.username}</p>
-                        <p className="text-sm text-gray-500">Click to open chat</p>
-                      </div>
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
               ) : (
                 <div className="text-center py-8">
                   <MessageCircle className="h-12 w-12 text-gray-300 mx-auto mb-3" />
-                  <p className="text-gray-500">No chats yet. Start by adding friends!</p>
+                  <p className="text-gray-500 mb-2">No chats yet!</p>
+                  <p className="text-sm text-gray-400 mb-4">Start a conversation by clicking "Chat" on a friend</p>
+                  <button
+                    onClick={() => setActiveView('friends')}
+                    className="text-blue-600 hover:text-blue-700 font-medium"
+                  >
+                    Go to Friends
+                  </button>
                 </div>
               )}
             </div>

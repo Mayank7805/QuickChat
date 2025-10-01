@@ -88,9 +88,29 @@ io.on('connection', (socket) => {
   });
 
   // Handle new messages
-  socket.on('send_message', (data) => {
+  socket.on('send_message', async (data) => {
     console.log('📨 New message:', data);
-    socket.to(data.chatId).emit('receive_message', data);
+    
+    try {
+      // Get sender information
+      const sender = await mongoose.model('User').findById(data.message.sender).select('username displayName');
+      
+      // Emit to recipient with sender name
+      socket.to(data.chatId).emit('new_message', {
+        chatId: data.chatId,
+        message: data.message,
+        senderName: sender ? (sender.displayName || sender.username) : 'Unknown',
+        senderId: data.message.sender
+      });
+    } catch (error) {
+      console.error('Error sending message:', error);
+      socket.to(data.chatId).emit('new_message', {
+        chatId: data.chatId,
+        message: data.message,
+        senderName: 'Unknown',
+        senderId: data.message.sender
+      });
+    }
   });
 
   // Handle typing indicators
