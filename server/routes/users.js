@@ -257,4 +257,61 @@ router.delete('/friend/:userId', authenticateToken, async (req, res) => {
   }
 });
 
+// Update profile (display name and avatar)
+router.put('/profile', authenticateToken, async (req, res) => {
+  try {
+    const currentUserId = req.user.id;
+    const { displayName, avatar } = req.body;
+
+    // Validate display name if provided
+    if (displayName !== undefined) {
+      if (typeof displayName !== 'string' || displayName.trim().length === 0) {
+        return res.status(400).json({ error: 'Display name cannot be empty' });
+      }
+      if (displayName.length > 50) {
+        return res.status(400).json({ error: 'Display name must be 50 characters or less' });
+      }
+    }
+
+    // Validate avatar if provided
+    if (avatar !== undefined) {
+      if (typeof avatar !== 'string') {
+        return res.status(400).json({ error: 'Invalid avatar format' });
+      }
+      // Check if it's a valid base64 image or empty string
+      if (avatar && !avatar.match(/^data:image\/(png|jpg|jpeg|gif|webp);base64,/)) {
+        return res.status(400).json({ error: 'Avatar must be a valid base64 image' });
+      }
+      // Limit avatar size (approximately 5MB in base64)
+      if (avatar.length > 7000000) {
+        return res.status(400).json({ error: 'Avatar image is too large (max 5MB)' });
+      }
+    }
+
+    // Build update object
+    const updateData = {};
+    if (displayName !== undefined) updateData.displayName = displayName.trim();
+    if (avatar !== undefined) updateData.avatar = avatar;
+
+    // Update user profile
+    const updatedUser = await User.findByIdAndUpdate(
+      currentUserId,
+      { $set: updateData },
+      { new: true, runValidators: true }
+    ).select('username displayName avatar status lastSeen');
+
+    if (!updatedUser) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+
+    res.json({ 
+      message: 'Profile updated successfully',
+      user: updatedUser 
+    });
+  } catch (error) {
+    console.error('Profile update error:', error);
+    res.status(500).json({ error: 'Failed to update profile' });
+  }
+});
+
 module.exports = router;

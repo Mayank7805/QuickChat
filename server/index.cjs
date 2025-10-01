@@ -149,6 +149,39 @@ io.on('connection', (socket) => {
     }
   });
 
+  // WebRTC signaling for video/audio calls
+  socket.on('webrtc_offer', (data) => {
+    console.log('📞 WebRTC offer from', data.from, 'to', data.to);
+    const recipientSocketId = onlineUsers.get(data.to);
+    if (recipientSocketId) {
+      io.to(recipientSocketId).emit('webrtc_offer', data);
+    }
+  });
+
+  socket.on('webrtc_answer', (data) => {
+    console.log('📞 WebRTC answer from', data.from || socket.userId, 'to', data.to);
+    const recipientSocketId = onlineUsers.get(data.to);
+    if (recipientSocketId) {
+      io.to(recipientSocketId).emit('webrtc_answer', data);
+    }
+  });
+
+  socket.on('webrtc_ice_candidate', (data) => {
+    console.log('📞 ICE candidate from', socket.userId, 'to', data.to);
+    const recipientSocketId = onlineUsers.get(data.to);
+    if (recipientSocketId) {
+      io.to(recipientSocketId).emit('webrtc_ice_candidate', data);
+    }
+  });
+
+  socket.on('webrtc_call_ended', (data) => {
+    console.log('📞 Call ended from', socket.userId, 'to', data.to);
+    const recipientSocketId = onlineUsers.get(data.to);
+    if (recipientSocketId) {
+      io.to(recipientSocketId).emit('webrtc_call_ended', data);
+    }
+  });
+
   socket.on('disconnect', async () => {
     console.log('👤 User disconnected:', socket.id);
     

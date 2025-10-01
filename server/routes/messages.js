@@ -122,7 +122,7 @@ router.post('/chat/:chatId/message', authenticateToken, async (req, res) => {
   try {
     const currentUserId = req.user.id;
     const { chatId } = req.params;
-    const { content, messageType = 'text', replyTo, encryptedContent } = req.body;
+    const { content, messageType = 'text', type = 'text', replyTo, encryptedContent } = req.body;
 
     if (!content && !encryptedContent) {
       return res.status(400).json({ error: 'Message content is required' });
@@ -139,6 +139,7 @@ router.post('/chat/:chatId/message', authenticateToken, async (req, res) => {
       sender: currentUserId,
       content: content || '',
       messageType,
+      type,
       encryptedContent,
       isEncrypted: !!encryptedContent,
       replyTo: replyTo || null

@@ -1,8 +1,11 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { LogOut, MessageCircle, Users, Search, UserPlus, Check, X, Bell, Send, ArrowLeft } from 'lucide-react';
+import { LogOut, MessageCircle, Users, Search, UserPlus, Check, X, Bell, Send, ArrowLeft, Settings, Phone, Video } from 'lucide-react';
 import { friendsAPI, chatsAPI } from '../api/index';
 import { io, Socket } from 'socket.io-client';
 import { Friend, FriendRequest, Message, ChatData } from '../types';
+import Profile from './Profile';
+import VideoCall from '../components/VideoCall';
+import IncomingCall from '../components/IncomingCall';
 
 
 
@@ -10,6 +13,7 @@ interface User {
   id: string;
   username: string;
   displayName: string;
+  avatar?: string;
 }
 
 interface ChatProps {
@@ -40,6 +44,21 @@ const Chat: React.FC<ChatProps> = ({ user, onLogout }) => {
   
   // Unread messages tracking: { chatId: count }
   const [unreadMessages, setUnreadMessages] = useState<Record<string, number>>({});
+  
+  // Profile modal state
+  const [showProfile, setShowProfile] = useState(false);
+  const [currentUser, setCurrentUser] = useState(user);
+
+  // Call states
+  const [inCall, setInCall] = useState(false);
+  const [callType, setCallType] = useState<'audio' | 'video'>('audio');
+  const [isCallInitiator, setIsCallInitiator] = useState(false);
+  const [incomingCall, setIncomingCall] = useState<{
+    from: string;
+    fromName: string;
+    callType: 'audio' | 'video';
+    chatId: string;
+  } | null>(null);
 
   useEffect(() => {
     loadFriends();
@@ -158,6 +177,17 @@ const Chat: React.FC<ChatProps> = ({ user, onLogout }) => {
       } else {
         scrollToBottom();
       }
+    });
+
+    // Handle incoming call
+    newSocket.on('webrtc_offer', (data) => {
+      console.log('Incoming call from:', data.from);
+      setIncomingCall({
+        from: data.from,
+        fromName: data.fromName,
+        callType: data.callType,
+        chatId: data.chatId
+      });
     });
 
     setSocket(newSocket);
@@ -341,6 +371,80 @@ const Chat: React.FC<ChatProps> = ({ user, onLogout }) => {
     }
   };
 
+  // Call functions
+  const sendCallMessage = async (callType: 'audio' | 'video', status: 'started' | 'ended') => {
+    if (!activeChat || !socket) return;
+    
+    const callMessage = {
+      content: status === 'started' 
+        ? `${callType === 'audio' ? '📞 Voice' : '📹 Video'} call started` 
+        : `${callType === 'audio' ? '📞 Voice' : '📹 Video'} call ended`,
+      type: 'call',
+      callType,
+      status
+    };
+
+    try {
+      const response = await fetch(`http://localhost:5001/api/messages/chat/${activeChat._id}/message`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${localStorage.getItem('token')}`
+        },
+        body: JSON.stringify({
+          content: callMessage.content,
+          type: 'call',
+          messageType: 'call'
+        })
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        socket.emit('send_message', {
+          chatId: activeChat._id,
+          message: data.message
+        });
+      }
+    } catch (error) {
+      console.error('Error sending call message:', error);
+    }
+  };
+
+  const initiateCall = (type: 'audio' | 'video') => {
+    if (!activeChat) return;
+    
+    setCallType(type);
+    setIsCallInitiator(true);
+    setInCall(true);
+    sendCallMessage(type, 'started');
+  };
+
+  const acceptCall = () => {
+    if (!incomingCall) return;
+    
+    setCallType(incomingCall.callType);
+    setIsCallInitiator(false);
+    setInCall(true);
+    setIncomingCall(null);
+  };
+
+  const rejectCall = () => {
+    if (!incomingCall || !socket) return;
+    
+    socket.emit('webrtc_call_ended', {
+      to: incomingCall.from,
+      chatId: incomingCall.chatId
+    });
+    
+    setIncomingCall(null);
+  };
+
+  const endCall = () => {
+    sendCallMessage(callType, 'ended');
+    setInCall(false);
+    setIsCallInitiator(false);
+  };
+
   return (
     <div className="flex h-screen bg-gray-100">
       <div className="w-80 bg-white border-r border-gray-200 flex flex-col">
@@ -353,12 +457,29 @@ const Chat: React.FC<ChatProps> = ({ user, onLogout }) => {
           </div>
           
           <div className="flex items-center space-x-3 mb-4">
-            <div className="w-12 h-12 bg-gradient-to-r from-purple-400 to-blue-400 rounded-full flex items-center justify-center text-white font-semibold">
-              {user.displayName?.[0]?.toUpperCase() || user.username?.[0]?.toUpperCase() || '?'}
-            </div>
-            <div>
-              <h3 className="font-semibold text-gray-900">{user.displayName || user.username}</h3>
-              <p className="text-sm text-gray-500">@{user.username}</p>
+            <button
+              onClick={() => setShowProfile(true)}
+              className="relative group"
+              title="Edit profile"
+            >
+              <div className="w-12 h-12 bg-gradient-to-r from-purple-400 to-blue-400 rounded-full flex items-center justify-center text-white font-semibold overflow-hidden">
+                {currentUser.avatar ? (
+                  <img
+                    src={currentUser.avatar}
+                    alt="Profile"
+                    className="w-full h-full object-cover"
+                  />
+                ) : (
+                  <span>{currentUser.displayName?.[0]?.toUpperCase() || currentUser.username?.[0]?.toUpperCase() || '?'}</span>
+                )}
+              </div>
+              <div className="absolute inset-0 bg-black bg-opacity-0 group-hover:bg-opacity-30 rounded-full transition-all flex items-center justify-center">
+                <Settings className="h-5 w-5 text-white opacity-0 group-hover:opacity-100 transition-opacity" />
+              </div>
+            </button>
+            <div className="flex-1">
+              <h3 className="font-semibold text-gray-900">{currentUser.displayName || currentUser.username}</h3>
+              <p className="text-sm text-gray-500">@{currentUser.username}</p>
             </div>
           </div>
 
@@ -662,32 +783,67 @@ const Chat: React.FC<ChatProps> = ({ user, onLogout }) => {
       <div className="flex-1 flex flex-col bg-gray-50">
         {activeView === 'messaging' && activeChat ? (
           <>
-            <div className="bg-white border-b border-gray-200 px-4 py-3 flex items-center space-x-3">
-              <button
-                onClick={() => {
-                  setActiveView('chats');
-                  setActiveChat(null);
-                  setMessages([]);
-                }}
-                className="p-2 hover:bg-gray-100 rounded-full"
-              >
-                <ArrowLeft className="h-5 w-5 text-gray-600" />
-              </button>
-              <div className="relative">
-                <div className="w-10 h-10 bg-gradient-to-r from-purple-400 to-blue-400 rounded-full flex items-center justify-center text-white font-semibold">
-                  {activeChat.friend.displayName?.[0]?.toUpperCase() || activeChat.friend.username?.[0]?.toUpperCase() || 'U'}
+            <div className="bg-white border-b border-gray-200 px-4 py-3 flex items-center justify-between">
+              <div className="flex items-center space-x-3">
+                <button
+                  onClick={() => {
+                    setActiveView('chats');
+                    setActiveChat(null);
+                    setMessages([]);
+                  }}
+                  className="p-2 hover:bg-gray-100 rounded-full"
+                >
+                  <ArrowLeft className="h-5 w-5 text-gray-600" />
+                </button>
+                <div className="relative">
+                  <div className="w-10 h-10 bg-gradient-to-r from-purple-400 to-blue-400 rounded-full flex items-center justify-center text-white font-semibold">
+                    {activeChat.friend.displayName?.[0]?.toUpperCase() || activeChat.friend.username?.[0]?.toUpperCase() || 'U'}
+                  </div>
+                  <div className={`absolute -bottom-0.5 -right-0.5 w-3 h-3 rounded-full border-2 border-white ${activeChat.friend.status === 'online' ? 'bg-green-500' : 'bg-gray-400'}`}></div>
                 </div>
-                <div className={`absolute -bottom-0.5 -right-0.5 w-3 h-3 rounded-full border-2 border-white ${activeChat.friend.status === 'online' ? 'bg-green-500' : 'bg-gray-400'}`}></div>
+                <div>
+                  <p className="font-medium text-gray-900">{activeChat.friend.displayName || activeChat.friend.username}</p>
+                  <p className="text-sm text-gray-500">@{activeChat.friend.username}</p>
+                </div>
               </div>
-              <div>
-                <p className="font-medium text-gray-900">{activeChat.friend.displayName || activeChat.friend.username}</p>
-                <p className="text-sm text-gray-500">@{activeChat.friend.username}</p>
+              
+              {/* Call buttons */}
+              <div className="flex items-center space-x-2">
+                <button
+                  onClick={() => initiateCall('audio')}
+                  className="p-2 hover:bg-gray-100 rounded-full transition-colors"
+                  title="Voice call"
+                >
+                  <Phone className="h-5 w-5 text-gray-600" />
+                </button>
+                <button
+                  onClick={() => initiateCall('video')}
+                  className="p-2 hover:bg-gray-100 rounded-full transition-colors"
+                  title="Video call"
+                >
+                  <Video className="h-5 w-5 text-gray-600" />
+                </button>
               </div>
             </div>
 
             <div className="flex-1 overflow-y-auto p-4 space-y-4">
               {messages.map((message) => {
                 const isSentByMe = message.sender === user.id;
+                const isCallMessage = message.type === 'call';
+                
+                if (isCallMessage) {
+                  return (
+                    <div key={message._id} className="flex justify-center">
+                      <div className="bg-gray-100 text-gray-600 text-sm px-4 py-2 rounded-full border border-gray-200">
+                        <p>{message.content}</p>
+                        <p className="text-xs text-gray-400 text-center mt-0.5">
+                          {message.timestamp ? new Date(message.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : 'Just now'}
+                        </p>
+                      </div>
+                    </div>
+                  );
+                }
+                
                 return (
                   <div key={message._id} className={`flex ${isSentByMe ? 'justify-end' : 'justify-start'}`}>
                     <div className={`max-w-[70%] break-words rounded-lg px-4 py-2 ${isSentByMe ? 'bg-blue-600 text-white' : 'bg-white border border-gray-200'}`}>
@@ -751,6 +907,42 @@ const Chat: React.FC<ChatProps> = ({ user, onLogout }) => {
           </div>
         )}
       </div>
+      
+      {/* Profile Modal */}
+      {showProfile && (
+        <Profile
+          user={currentUser}
+          onClose={() => setShowProfile(false)}
+          onUpdateProfile={(updatedUser) => {
+            setCurrentUser(updatedUser);
+            setNotifications(prev => [...prev, 'Profile updated successfully!']);
+          }}
+        />
+      )}
+
+      {/* Incoming Call Modal */}
+      {incomingCall && (
+        <IncomingCall
+          callerName={incomingCall.fromName}
+          callType={incomingCall.callType}
+          onAccept={acceptCall}
+          onReject={rejectCall}
+        />
+      )}
+
+      {/* Video/Audio Call */}
+      {inCall && activeChat && socket && (
+        <VideoCall
+          socket={socket}
+          userId={user.id}
+          friendId={activeChat.friend._id}
+          friendName={activeChat.friend.displayName || activeChat.friend.username}
+          chatId={activeChat._id}
+          isInitiator={isCallInitiator}
+          callType={callType}
+          onEndCall={endCall}
+        />
+      )}
     </div>
   );
 };

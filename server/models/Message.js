@@ -18,7 +18,12 @@ const MessageSchema = new mongoose.Schema({
   },
   messageType: {
     type: String,
-    enum: ['text', 'image', 'file', 'voice', 'video'],
+    enum: ['text', 'image', 'file', 'voice', 'video', 'call'],
+    default: 'text'
+  },
+  type: {
+    type: String,
+    enum: ['text', 'call'],
     default: 'text'
   },
   isEncrypted: {
