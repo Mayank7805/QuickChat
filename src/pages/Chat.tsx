@@ -935,6 +935,7 @@ const Chat: React.FC<ChatProps> = ({ user, onLogout }) => {
         <VideoCall
           socket={socket}
           userId={user.id}
+          userName={currentUser.displayName || currentUser.username}
           friendId={activeChat.friend._id}
           friendName={activeChat.friend.displayName || activeChat.friend.username}
           chatId={activeChat._id}

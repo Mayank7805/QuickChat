@@ -151,10 +151,17 @@ io.on('connection', (socket) => {
 
   // WebRTC signaling for video/audio calls
   socket.on('webrtc_offer', (data) => {
-    console.log('📞 WebRTC offer from', data.from, 'to', data.to);
+    console.log('📞 WebRTC offer from', data.from, '(' + data.fromName + ') to', data.to);
+    console.log('   Call type:', data.callType);
+    console.log('   Online users:', Array.from(onlineUsers.keys()));
     const recipientSocketId = onlineUsers.get(data.to);
     if (recipientSocketId) {
+      console.log('   ✅ Sending offer to recipient socket:', recipientSocketId);
       io.to(recipientSocketId).emit('webrtc_offer', data);
+    } else {
+      console.log('   ❌ Recipient not online or not found');
+      // Notify caller that recipient is offline
+      socket.emit('call_failed', { reason: 'User is offline' });
     }
   });
 
@@ -162,7 +169,10 @@ io.on('connection', (socket) => {
     console.log('📞 WebRTC answer from', data.from || socket.userId, 'to', data.to);
     const recipientSocketId = onlineUsers.get(data.to);
     if (recipientSocketId) {
+      console.log('   ✅ Sending answer to caller socket:', recipientSocketId);
       io.to(recipientSocketId).emit('webrtc_answer', data);
+    } else {
+      console.log('   ❌ Caller not found');
     }
   });
 
