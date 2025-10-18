@@ -58,6 +58,11 @@ interface UserData {
   displayName?: string;
 }
 
+interface LoginCredentials {
+  email: string;
+  password: string;
+}
+
 const authAPI = {
   register: async (userData: UserData): Promise<AuthResponse> => {
     return apiCall('/auth/register', {
@@ -66,7 +71,7 @@ const authAPI = {
     });
   },
 
-  login: async (credentials: Pick<UserData, 'username' | 'password'>): Promise<AuthResponse> => {
+  login: async (credentials: LoginCredentials): Promise<AuthResponse> => {
     return apiCall('/auth/login', {
       method: 'POST',
       body: JSON.stringify(credentials),

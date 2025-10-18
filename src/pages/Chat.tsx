@@ -576,9 +576,17 @@ const Chat: React.FC<ChatProps> = ({ user, onLogout }) => {
                   <div key={friend._id} className="flex items-center justify-between p-3 bg-white border border-gray-200 rounded-lg hover:bg-gray-50">
                     <div className="flex items-center space-x-3">
                       <div className="relative">
-                        <div className="w-10 h-10 bg-gradient-to-r from-purple-400 to-blue-400 rounded-full flex items-center justify-center text-white font-semibold">
-                          {friend.displayName?.[0]?.toUpperCase() || friend.username?.[0]?.toUpperCase() || 'U'}
-                        </div>
+                        {friend.avatar ? (
+                          <img
+                            src={friend.avatar}
+                            alt={friend.displayName || friend.username}
+                            className="w-10 h-10 rounded-full object-cover border border-gray-300"
+                          />
+                        ) : (
+                          <div className="w-10 h-10 bg-gradient-to-r from-purple-400 to-blue-400 rounded-full flex items-center justify-center text-white font-semibold">
+                            {friend.displayName?.[0]?.toUpperCase() || friend.username?.[0]?.toUpperCase() || 'U'}
+                          </div>
+                        )}
                         <div className={`absolute -bottom-0.5 -right-0.5 w-3 h-3 rounded-full border-2 border-white ${
                           friend.status === 'online' ? 'bg-green-500' : 'bg-gray-400'
                         }`}></div>
@@ -734,7 +742,15 @@ const Chat: React.FC<ChatProps> = ({ user, onLogout }) => {
                       >
                         <div className="relative">
                           <div className="w-10 h-10 bg-gradient-to-r from-purple-400 to-blue-400 rounded-full flex items-center justify-center text-white font-semibold">
-                            {chat.friend.displayName?.[0]?.toUpperCase() || chat.friend.username?.[0]?.toUpperCase() || 'U'}
+                            {chat.friend.avatar ? (
+                              <img
+                                src={chat.friend.avatar}
+                                alt={chat.friend.displayName || chat.friend.username}
+                                className="w-10 h-10 rounded-full object-cover border border-gray-300"
+                              />
+                            ) : (
+                              <span>{chat.friend.displayName?.[0]?.toUpperCase() || chat.friend.username?.[0]?.toUpperCase() || 'U'}</span>
+                            )}
                           </div>
                           <div className={`absolute -bottom-0.5 -right-0.5 w-3 h-3 rounded-full border-2 border-white ${chat.friend.status === 'online' ? 'bg-green-500' : 'bg-gray-400'}`}></div>
                           {unreadCount > 0 && (
@@ -797,7 +813,15 @@ const Chat: React.FC<ChatProps> = ({ user, onLogout }) => {
                 </button>
                 <div className="relative">
                   <div className="w-10 h-10 bg-gradient-to-r from-purple-400 to-blue-400 rounded-full flex items-center justify-center text-white font-semibold">
-                    {activeChat.friend.displayName?.[0]?.toUpperCase() || activeChat.friend.username?.[0]?.toUpperCase() || 'U'}
+                    {activeChat.friend.avatar ? (
+                      <img
+                        src={activeChat.friend.avatar}
+                        alt={activeChat.friend.displayName || activeChat.friend.username}
+                        className="w-12 h-12 rounded-full object-cover border border-gray-300"
+                      />
+                    ) : (
+                      <span>{activeChat.friend.displayName?.[0]?.toUpperCase() || activeChat.friend.username?.[0]?.toUpperCase() || 'U'}</span>
+                    )}
                   </div>
                   <div className={`absolute -bottom-0.5 -right-0.5 w-3 h-3 rounded-full border-2 border-white ${activeChat.friend.status === 'online' ? 'bg-green-500' : 'bg-gray-400'}`}></div>
                 </div>

@@ -2,6 +2,7 @@ export interface Friend {
   _id: string;
   username: string;
   displayName: string;
+  avatar?: string;
   status?: string;
 }
 

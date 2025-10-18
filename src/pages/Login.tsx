@@ -1,10 +1,15 @@
 import React, { useState } from 'react';
 import { MessageCircle, LogIn, User, Lock } from 'lucide-react';
-// @ts-ignore
-import { authAPI } from '../api/index.js';
+import { authAPI } from '../api/index';
+
+interface User {
+  id: string;
+  username: string;
+  displayName: string;
+}
 
 interface LoginProps {
-  onLogin: (token: string, user: any) => void;
+  onLogin: (token: string, user: User) => void;
   onSwitchToRegister: () => void;
 }
 
@@ -31,8 +36,8 @@ const Login: React.FC<LoginProps> = ({ onLogin, onSwitchToRegister }) => {
     try {
       const response = await authAPI.login(formData);
       onLogin(response.token, response.user);
-    } catch (err: any) {
-      setError(err.message || 'Login failed');
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Login failed');
     } finally {
       setLoading(false);
     }
