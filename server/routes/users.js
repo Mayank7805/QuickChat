@@ -304,6 +304,16 @@ router.put('/profile', authenticateToken, async (req, res) => {
       return res.status(404).json({ error: 'User not found' });
     }
 
+    // Notify friends about profile update via Socket.IO
+    const io = req.app.get('io');
+    if (io) {
+      io.emit('user_profile_updated', {
+        userId: currentUserId,
+        displayName: updatedUser.displayName,
+        avatar: updatedUser.avatar
+      });
+    }
+
     res.json({ 
       message: 'Profile updated successfully',
       user: updatedUser 

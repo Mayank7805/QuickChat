@@ -46,7 +46,8 @@ app.get('/api/test', (req, res) => {
 });
 
 // Socket.IO for real-time messaging
-const onlineUsers = new Map(); // Track online users
+const onlineUsers = new Map(); // Track online users: userId -> Set of socket IDs
+const userSockets = new Map(); // Track socket to user mapping: socketId -> userId
 
 io.on('connection', (socket) => {
   console.log('👤 User connected:', socket.id);
@@ -55,21 +56,32 @@ io.on('connection', (socket) => {
   socket.on('user_join', async (userId) => {
     socket.join(`user_${userId}`);
     socket.userId = userId;
-    onlineUsers.set(userId, socket.id);
-    console.log(`👤 User ${userId} joined personal room`);
     
-    // Update user status to online in database
+    // Track this socket for the user
+    if (!onlineUsers.has(userId)) {
+      onlineUsers.set(userId, new Set());
+    }
+    onlineUsers.get(userId).add(socket.id);
+    userSockets.set(socket.id, userId);
+    
+    console.log(`👤 User ${userId} joined personal room (${onlineUsers.get(userId).size} active connections)`);
+    
+    // Update user status to online in database (only if this is the first connection)
     try {
-      await mongoose.model('User').findByIdAndUpdate(userId, { 
-        status: 'online',
-        lastSeen: new Date()
-      });
-      
-      // Notify friends about status change
-      socket.broadcast.emit('user_status_change', {
-        userId: userId,
-        status: 'online'
-      });
+      const userSocketCount = onlineUsers.get(userId).size;
+      if (userSocketCount === 1) {
+        await mongoose.model('User').findByIdAndUpdate(userId, { 
+          status: 'online',
+          lastSeen: new Date()
+        });
+        
+        // Notify friends about status change
+        socket.broadcast.emit('user_status_change', {
+          userId: userId,
+          status: 'online'
+        });
+        console.log(`✅ User ${userId} status set to ONLINE`);
+      }
     } catch (error) {
       console.error('Error updating user status:', error);
     }
@@ -154,8 +166,10 @@ io.on('connection', (socket) => {
     console.log('📞 WebRTC offer from', data.from, '(' + data.fromName + ') to', data.to);
     console.log('   Call type:', data.callType);
     console.log('   Online users:', Array.from(onlineUsers.keys()));
-    const recipientSocketId = onlineUsers.get(data.to);
-    if (recipientSocketId) {
+    const recipientSockets = onlineUsers.get(data.to);
+    if (recipientSockets && recipientSockets.size > 0) {
+      // Send to all of recipient's connected sockets
+      const recipientSocketId = Array.from(recipientSockets)[0]; // Use first socket
       console.log('   ✅ Sending offer to recipient socket:', recipientSocketId);
       io.to(recipientSocketId).emit('webrtc_offer', data);
     } else {
@@ -167,8 +181,9 @@ io.on('connection', (socket) => {
 
   socket.on('webrtc_answer', (data) => {
     console.log('📞 WebRTC answer from', data.from || socket.userId, 'to', data.to);
-    const recipientSocketId = onlineUsers.get(data.to);
-    if (recipientSocketId) {
+    const recipientSockets = onlineUsers.get(data.to);
+    if (recipientSockets && recipientSockets.size > 0) {
+      const recipientSocketId = Array.from(recipientSockets)[0];
       console.log('   ✅ Sending answer to caller socket:', recipientSocketId);
       io.to(recipientSocketId).emit('webrtc_answer', data);
     } else {
@@ -178,41 +193,60 @@ io.on('connection', (socket) => {
 
   socket.on('webrtc_ice_candidate', (data) => {
     console.log('📞 ICE candidate from', socket.userId, 'to', data.to);
-    const recipientSocketId = onlineUsers.get(data.to);
-    if (recipientSocketId) {
+    const recipientSockets = onlineUsers.get(data.to);
+    if (recipientSockets && recipientSockets.size > 0) {
+      const recipientSocketId = Array.from(recipientSockets)[0];
       io.to(recipientSocketId).emit('webrtc_ice_candidate', data);
     }
   });
 
   socket.on('webrtc_call_ended', (data) => {
     console.log('📞 Call ended from', socket.userId, 'to', data.to);
-    const recipientSocketId = onlineUsers.get(data.to);
-    if (recipientSocketId) {
-      io.to(recipientSocketId).emit('webrtc_call_ended', data);
+    const recipientSockets = onlineUsers.get(data.to);
+    if (recipientSockets && recipientSockets.size > 0) {
+      // Notify all recipient's sockets
+      recipientSockets.forEach(socketId => {
+        io.to(socketId).emit('webrtc_call_ended', data);
+      });
     }
   });
 
   socket.on('disconnect', async () => {
     console.log('👤 User disconnected:', socket.id);
     
-    if (socket.userId) {
-      onlineUsers.delete(socket.userId);
-      
-      // Update user status to offline
-      try {
-        await mongoose.model('User').findByIdAndUpdate(socket.userId, { 
-          status: 'offline',
-          lastSeen: new Date()
-        });
+    const userId = userSockets.get(socket.id);
+    if (userId) {
+      // Remove this socket from the user's socket set
+      if (onlineUsers.has(userId)) {
+        onlineUsers.get(userId).delete(socket.id);
         
-        // Notify friends about status change
-        socket.broadcast.emit('user_status_change', {
-          userId: socket.userId,
-          status: 'offline'
-        });
-      } catch (error) {
-        console.error('Error updating user status on disconnect:', error);
+        const remainingConnections = onlineUsers.get(userId).size;
+        console.log(`👤 User ${userId} has ${remainingConnections} remaining connections`);
+        
+        // Only set to offline if no more connections
+        if (remainingConnections === 0) {
+          onlineUsers.delete(userId);
+          
+          // Update user status to offline
+          try {
+            await mongoose.model('User').findByIdAndUpdate(userId, { 
+              status: 'offline',
+              lastSeen: new Date()
+            });
+            
+            // Notify friends about status change
+            socket.broadcast.emit('user_status_change', {
+              userId: userId,
+              status: 'offline'
+            });
+            console.log(`❌ User ${userId} status set to OFFLINE`);
+          } catch (error) {
+            console.error('Error updating user status on disconnect:', error);
+          }
+        }
       }
+      
+      userSockets.delete(socket.id);
     }
   });
 });

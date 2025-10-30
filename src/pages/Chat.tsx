@@ -34,6 +34,7 @@ const Chat: React.FC<ChatProps> = ({ user, onLogout }) => {
   const [socket, setSocket] = useState<Socket | null>(null);
   const [notifications, setNotifications] = useState<string[]>([]);
   const [isLoading, setIsLoading] = useState(false);
+  const [expandedNotification, setExpandedNotification] = useState<number | null>(null);
   
   // Chat states
   const [activeChat, setActiveChat] = useState<ChatData | null>(null);
@@ -63,6 +64,15 @@ const Chat: React.FC<ChatProps> = ({ user, onLogout }) => {
   useEffect(() => {
     loadFriends();
     loadChats();
+    
+    // Refresh friends status every 30 seconds to catch any missed updates
+    const statusRefreshInterval = setInterval(() => {
+      loadFriends();
+    }, 30000);
+    
+    return () => {
+      clearInterval(statusRefreshInterval);
+    };
   }, []);
 
   useEffect(() => {
@@ -100,12 +110,29 @@ const Chat: React.FC<ChatProps> = ({ user, onLogout }) => {
 
   const initializeSocket = () => {
     const newSocket = io('http://localhost:5001', {
-      auth: { token: localStorage.getItem('token') }
+      auth: { token: localStorage.getItem('token') },
+      reconnection: true,
+      reconnectionDelay: 1000,
+      reconnectionDelayMax: 5000,
+      reconnectionAttempts: 10
     });
 
     newSocket.on('connect', () => {
-      console.log('Connected to server');
+      console.log('✅ Connected to server');
       newSocket.emit('user_join', user.id);
+      
+      // Reload friends status after reconnection to sync
+      loadFriends();
+    });
+    
+    newSocket.on('disconnect', (reason) => {
+      console.log('❌ Disconnected from server:', reason);
+    });
+    
+    newSocket.on('reconnect', (attemptNumber) => {
+      console.log('🔄 Reconnected to server after', attemptNumber, 'attempts');
+      newSocket.emit('user_join', user.id);
+      loadFriends();
     });
 
     newSocket.on('friend_request_received', (data) => {
@@ -124,6 +151,7 @@ const Chat: React.FC<ChatProps> = ({ user, onLogout }) => {
       // Get sender information
       const senderId = data.message.sender;
       const senderName = data.senderName || 'Someone';
+      const chatId = data.chatId || data.message.chat;
       
       // Only add the message if it's not already in the messages array
       setMessages(prev => {
@@ -140,39 +168,34 @@ const Chat: React.FC<ChatProps> = ({ user, onLogout }) => {
       
       // Update unread count if message is not from current user and not in active chat
       if (senderId !== user.id) {
-        const chatId = data.chatId || data.message.chat;
-        
         // Check if this message is in the currently active chat
-        setActiveChat(currentActiveChat => {
-          if (currentActiveChat && currentActiveChat._id === chatId) {
-            // User is viewing this chat, just scroll to bottom
-            scrollToBottom();
-            return currentActiveChat;
-          } else {
-            // User is not viewing this chat, increment unread count
-            setUnreadMessages(prev => ({
-              ...prev,
-              [chatId]: (prev[chatId] || 0) + 1
-            }));
-            
-            // Show notification
-            setNotifications(prev => [...prev, `New message from ${senderName}`]);
-            
-            // Update the chat's last message in the chats list
-            setChats(prevChats => {
-              return prevChats.map(chat => {
-                if (chat._id === chatId) {
-                  return {
-                    ...chat,
-                    lastMessage: data.message
-                  };
-                }
-                return chat;
-              });
-            });
-            
-            return currentActiveChat;
-          }
+        const isActiveChat = activeChat && activeChat._id === chatId;
+        
+        if (isActiveChat) {
+          // User is viewing this chat, just scroll to bottom
+          scrollToBottom();
+        } else {
+          // User is not viewing this chat, increment unread count
+          setUnreadMessages(prev => ({
+            ...prev,
+            [chatId]: (prev[chatId] || 0) + 1
+          }));
+          
+          // Show notification (only once)
+          setNotifications(prev => [...prev, `New message from ${senderName}`]);
+        }
+        
+        // Update the chat's last message in the chats list
+        setChats(prevChats => {
+          return prevChats.map(chat => {
+            if (chat._id === chatId) {
+              return {
+                ...chat,
+                lastMessage: data.message
+              };
+            }
+            return chat;
+          });
         });
       } else {
         scrollToBottom();
@@ -181,12 +204,92 @@ const Chat: React.FC<ChatProps> = ({ user, onLogout }) => {
 
     // Handle incoming call
     newSocket.on('webrtc_offer', (data) => {
-      console.log('Incoming call from:', data.from);
+      console.log('📞 Incoming call from:', data.fromName, '(', data.from, ')');
+      console.log('📞 Call type:', data.callType);
+      console.log('📞 Chat ID:', data.chatId);
       setIncomingCall({
         from: data.from,
         fromName: data.fromName,
         callType: data.callType,
         chatId: data.chatId
+      });
+    });
+
+    // Handle user status changes
+    newSocket.on('user_status_change', (data) => {
+      console.log('🟢 User status changed:', data.userId, '→', data.status);
+      
+      // Update friends list
+      setFriends(prev => 
+        prev.map(friend => 
+          friend._id === data.userId 
+            ? { ...friend, status: data.status }
+            : friend
+        )
+      );
+      
+      // Update chats list
+      setChats(prev =>
+        prev.map(chat =>
+          chat.friend._id === data.userId
+            ? { ...chat, friend: { ...chat.friend, status: data.status } }
+            : chat
+        )
+      );
+      
+      // Update active chat if it's the same user
+      setActiveChat(prev => 
+        prev && prev.friend._id === data.userId
+          ? { ...prev, friend: { ...prev.friend, status: data.status } }
+          : prev
+      );
+    });
+
+    // Handle user profile updates
+    newSocket.on('user_profile_updated', (data) => {
+      console.log('👤 User profile updated:', data.userId);
+      console.log('   Display name:', data.displayName);
+      console.log('   Avatar length:', data.avatar?.length || 0);
+      
+      // Update current user if it's their own profile
+      if (data.userId === user.id) {
+        console.log('   ✅ Updating current user profile');
+        setCurrentUser(prev => ({
+          ...prev,
+          displayName: data.displayName,
+          avatar: data.avatar
+        }));
+      }
+      
+      // Update friends list
+      setFriends(prev => 
+        prev.map(friend => {
+          if (friend._id === data.userId) {
+            console.log('   ✅ Updating friend:', friend.username);
+            return { ...friend, displayName: data.displayName, avatar: data.avatar };
+          }
+          return friend;
+        })
+      );
+      
+      // Update chats list
+      setChats(prev =>
+        prev.map(chat => {
+          if (chat.friend._id === data.userId) {
+            console.log('   ✅ Updating chat with:', chat.friend.username);
+            return { ...chat, friend: { ...chat.friend, displayName: data.displayName, avatar: data.avatar } };
+          }
+          return chat;
+        })
+      );
+      
+      // Update active chat if it's the same user
+      setActiveChat(prev => {
+        if (prev && prev.friend._id === data.userId) {
+          console.log('   ✅ Updating active chat');
+          return { ...prev, friend: { ...prev.friend, displayName: data.displayName, avatar: data.avatar } };
+        }
+        return prev;
       });
     });
 
@@ -316,6 +419,11 @@ const Chat: React.FC<ChatProps> = ({ user, onLogout }) => {
     try {
       const response = await friendsAPI.getFriendsList();
       console.log('Friends response:', response);
+      console.log('Friends with avatars:', response.friends?.map(f => ({ 
+        username: f.username, 
+        hasAvatar: !!f.avatar, 
+        avatarLength: f.avatar?.length || 0 
+      })));
       setFriends(response.friends || []);
       setFriendRequests(response.pendingRequests || { received: [], sent: [] });
     } catch (error) {
@@ -413,19 +521,48 @@ const Chat: React.FC<ChatProps> = ({ user, onLogout }) => {
   const initiateCall = (type: 'audio' | 'video') => {
     if (!activeChat) return;
     
+    console.log('📞 Initiating', type, 'call to:', activeChat.friend.displayName || activeChat.friend.username);
+    console.log('📞 Friend ID:', activeChat.friend._id);
+    console.log('📞 Chat ID:', activeChat._id);
+    
     setCallType(type);
     setIsCallInitiator(true);
     setInCall(true);
     sendCallMessage(type, 'started');
   };
 
-  const acceptCall = () => {
+  const acceptCall = async () => {
     if (!incomingCall) return;
     
-    setCallType(incomingCall.callType);
-    setIsCallInitiator(false);
-    setInCall(true);
-    setIncomingCall(null);
+    try {
+      // Find or load the chat for this call
+      let chat = chats.find(c => c._id === incomingCall.chatId);
+      
+      if (!chat) {
+        // If chat doesn't exist in local state, try to load it
+        const response = await chatsAPI.getChats();
+        chat = response.chats?.find((c: ChatData) => c._id === incomingCall.chatId);
+      }
+      
+      if (chat) {
+        // Set the active chat so VideoCall component has the context
+        setActiveChat(chat);
+        setActiveView('messaging');
+        
+        // Load messages for this chat
+        const messagesResponse = await chatsAPI.getChatMessages(chat._id);
+        setMessages(messagesResponse.messages || []);
+      }
+      
+      setCallType(incomingCall.callType);
+      setIsCallInitiator(false);
+      setInCall(true);
+      setIncomingCall(null);
+    } catch (error) {
+      console.error('Error accepting call:', error);
+      setNotifications(prev => [...prev, 'Failed to accept call']);
+      setIncomingCall(null);
+    }
   };
 
   const rejectCall = () => {
@@ -516,18 +653,87 @@ const Chat: React.FC<ChatProps> = ({ user, onLogout }) => {
 
         {notifications.length > 0 && (
           <div className="p-4 border-b border-gray-200">
-            {notifications.slice(-2).map((notification, index) => (
-              <div key={index} className="flex items-center space-x-2 bg-blue-50 p-2 rounded-lg mb-2">
-                <Bell className="h-4 w-4 text-blue-500" />
-                <span className="text-sm text-blue-700">{notification}</span>
-                <button 
-                  onClick={() => setNotifications(prev => prev.filter((_, i) => i !== index))}
-                  className="ml-auto text-blue-500 hover:text-blue-700"
-                >
-                  <X className="h-3 w-3" />
-                </button>
-              </div>
-            ))}
+            {notifications.slice(-2).map((notification, sliceIndex) => {
+              const actualIndex = notifications.length - 2 + sliceIndex; // Calculate actual index in full array
+              const isFriendRequest = notification.includes('sent you a friend request');
+              const isExpanded = expandedNotification === actualIndex;
+              
+              return (
+                <div key={actualIndex} className={`bg-blue-50 p-3 rounded-lg mb-2 ${isFriendRequest ? 'cursor-pointer' : ''}`}>
+                  <div 
+                    className="flex items-center space-x-2"
+                    onClick={() => {
+                      if (isFriendRequest) {
+                        setExpandedNotification(isExpanded ? null : actualIndex);
+                      }
+                    }}
+                  >
+                    <Bell className="h-4 w-4 text-blue-500" />
+                    <span className="text-sm text-blue-700 flex-1">{notification}</span>
+                    {!isExpanded && (
+                      <button 
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setNotifications(prev => prev.filter((_, i) => i !== actualIndex));
+                          setExpandedNotification(null);
+                        }}
+                        className="text-blue-500 hover:text-blue-700"
+                      >
+                        <X className="h-3 w-3" />
+                      </button>
+                    )}
+                  </div>
+                  
+                  {isExpanded && isFriendRequest && (
+                    <div className="mt-3 flex items-center space-x-2">
+                      <button
+                        onClick={async (e) => {
+                          e.stopPropagation();
+                          const username = notification.split(' ')[0];
+                          const request = friendRequests.received.find(
+                            r => (r.displayName || r.username) === username
+                          );
+                          if (request) {
+                            await acceptFriendRequest(request._id);
+                            setNotifications(prev => prev.filter((_, i) => i !== actualIndex));
+                            setExpandedNotification(null);
+                          }
+                        }}
+                        className="flex-1 px-3 py-1.5 bg-green-500 hover:bg-green-600 text-white rounded-lg text-sm font-medium transition-colors"
+                      >
+                        Accept
+                      </button>
+                      <button
+                        onClick={async (e) => {
+                          e.stopPropagation();
+                          const username = notification.split(' ')[0];
+                          const request = friendRequests.received.find(
+                            r => (r.displayName || r.username) === username
+                          );
+                          if (request) {
+                            await declineFriendRequest(request._id);
+                            setNotifications(prev => prev.filter((_, i) => i !== actualIndex));
+                            setExpandedNotification(null);
+                          }
+                        }}
+                        className="flex-1 px-3 py-1.5 bg-red-500 hover:bg-red-600 text-white rounded-lg text-sm font-medium transition-colors"
+                      >
+                        Reject
+                      </button>
+                      <button 
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setExpandedNotification(null);
+                        }}
+                        className="px-3 py-1.5 bg-gray-200 hover:bg-gray-300 text-gray-700 rounded-lg text-sm font-medium transition-colors"
+                      >
+                        <X className="h-4 w-4" />
+                      </button>
+                    </div>
+                  )}
+                </div>
+              );
+            })}
           </div>
         )}
 
@@ -741,12 +947,12 @@ const Chat: React.FC<ChatProps> = ({ user, onLogout }) => {
                         }`}
                       >
                         <div className="relative">
-                          <div className="w-10 h-10 bg-gradient-to-r from-purple-400 to-blue-400 rounded-full flex items-center justify-center text-white font-semibold">
+                          <div className="w-10 h-10 bg-gradient-to-r from-purple-400 to-blue-400 rounded-full flex items-center justify-center text-white font-semibold overflow-hidden">
                             {chat.friend.avatar ? (
                               <img
                                 src={chat.friend.avatar}
                                 alt={chat.friend.displayName || chat.friend.username}
-                                className="w-10 h-10 rounded-full object-cover border border-gray-300"
+                                className="w-full h-full object-cover"
                               />
                             ) : (
                               <span>{chat.friend.displayName?.[0]?.toUpperCase() || chat.friend.username?.[0]?.toUpperCase() || 'U'}</span>
@@ -812,12 +1018,12 @@ const Chat: React.FC<ChatProps> = ({ user, onLogout }) => {
                   <ArrowLeft className="h-5 w-5 text-gray-600" />
                 </button>
                 <div className="relative">
-                  <div className="w-10 h-10 bg-gradient-to-r from-purple-400 to-blue-400 rounded-full flex items-center justify-center text-white font-semibold">
+                  <div className="w-10 h-10 bg-gradient-to-r from-purple-400 to-blue-400 rounded-full flex items-center justify-center text-white font-semibold overflow-hidden">
                     {activeChat.friend.avatar ? (
                       <img
                         src={activeChat.friend.avatar}
                         alt={activeChat.friend.displayName || activeChat.friend.username}
-                        className="w-12 h-12 rounded-full object-cover border border-gray-300"
+                        className="w-full h-full object-cover"
                       />
                     ) : (
                       <span>{activeChat.friend.displayName?.[0]?.toUpperCase() || activeChat.friend.username?.[0]?.toUpperCase() || 'U'}</span>
