@@ -583,8 +583,13 @@ const Chat: React.FC<ChatProps> = ({ user, onLogout }) => {
   };
 
   return (
-    <div className="flex h-screen bg-gray-100">
-      <div className="w-80 bg-white border-r border-gray-200 flex flex-col">
+    <div className="flex h-screen bg-gradient-to-br from-blue-50 via-purple-50 to-pink-50 relative overflow-hidden">
+      {/* Animated Background Blobs */}
+      <div className="absolute top-0 -left-4 w-72 h-72 bg-purple-300 rounded-full mix-blend-multiply filter blur-xl opacity-70 animate-blob"></div>
+      <div className="absolute top-0 -right-4 w-72 h-72 bg-yellow-300 rounded-full mix-blend-multiply filter blur-xl opacity-70 animate-blob animation-delay-2000"></div>
+      <div className="absolute -bottom-8 left-20 w-72 h-72 bg-pink-300 rounded-full mix-blend-multiply filter blur-xl opacity-70 animate-blob animation-delay-4000"></div>
+
+      <div className="w-80 bg-white/95 backdrop-blur-sm border-r border-gray-200 flex flex-col relative z-10">
         <div className="p-4 border-b border-gray-200">
           <div className="flex items-center justify-between mb-4">
             <h1 className="text-xl font-bold text-gray-900">QuickChat</h1>
@@ -1002,10 +1007,10 @@ const Chat: React.FC<ChatProps> = ({ user, onLogout }) => {
         </div>
       </div>
 
-      <div className="flex-1 flex flex-col bg-gray-50">
+      <div className="flex-1 flex flex-col bg-transparent relative z-10">
         {activeView === 'messaging' && activeChat ? (
           <>
-            <div className="bg-white border-b border-gray-200 px-4 py-3 flex items-center justify-between">
+            <div className="bg-white/95 backdrop-blur-sm border-b border-gray-200 px-4 py-3 flex items-center justify-between">
               <div className="flex items-center space-x-3">
                 <button
                   onClick={() => {
@@ -1056,7 +1061,7 @@ const Chat: React.FC<ChatProps> = ({ user, onLogout }) => {
               </div>
             </div>
 
-            <div className="flex-1 overflow-y-auto p-4 space-y-4">
+            <div className="flex-1 overflow-y-auto p-4 space-y-4 bg-white/50">
               {messages.map((message) => {
                 const isSentByMe = message.sender === user.id;
                 const isCallMessage = message.type === 'call';
@@ -1088,7 +1093,7 @@ const Chat: React.FC<ChatProps> = ({ user, onLogout }) => {
               <div ref={messagesEndRef} />
             </div>
 
-            <div className="bg-white border-t border-gray-200 p-4">
+            <div className="bg-white/95 backdrop-blur-sm border-t border-gray-200 p-4">
               <div className="flex space-x-2">
                 <input
                   type="text"
@@ -1174,6 +1179,30 @@ const Chat: React.FC<ChatProps> = ({ user, onLogout }) => {
           onEndCall={endCall}
         />
       )}
+
+      {/* Custom Animations */}
+      <style>{`
+        @keyframes blob {
+          0%, 100% {
+            transform: translate(0px, 0px) scale(1);
+          }
+          33% {
+            transform: translate(30px, -50px) scale(1.1);
+          }
+          66% {
+            transform: translate(-20px, 20px) scale(0.9);
+          }
+        }
+        .animate-blob {
+          animation: blob 7s infinite;
+        }
+        .animation-delay-2000 {
+          animation-delay: 2s;
+        }
+        .animation-delay-4000 {
+          animation-delay: 4s;
+        }
+      `}</style>
     </div>
   );
 };

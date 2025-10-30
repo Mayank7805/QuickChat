@@ -44,13 +44,22 @@ const Login: React.FC<LoginProps> = ({ onLogin, onSwitchToRegister }) => {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center p-4">
-      <div className="bg-white rounded-2xl shadow-xl p-8 w-full max-w-md">
+    <div className="min-h-screen bg-gradient-to-br from-blue-50 via-purple-50 to-pink-50 flex items-center justify-center p-4 relative overflow-hidden">
+      {/* Animated Background Elements */}
+      <div className="absolute inset-0 overflow-hidden pointer-events-none">
+        <div className="absolute -top-40 -right-40 w-80 h-80 bg-purple-300 rounded-full mix-blend-multiply filter blur-xl opacity-70 animate-blob"></div>
+        <div className="absolute -bottom-40 -left-40 w-80 h-80 bg-blue-300 rounded-full mix-blend-multiply filter blur-xl opacity-70 animate-blob animation-delay-2000"></div>
+        <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 w-80 h-80 bg-pink-300 rounded-full mix-blend-multiply filter blur-xl opacity-70 animate-blob animation-delay-4000"></div>
+      </div>
+
+      <div className="bg-white/80 backdrop-blur-lg rounded-2xl shadow-xl p-8 w-full max-w-md relative z-10">
         <div className="text-center mb-8">
           <div className="flex items-center justify-center mb-4">
-            <MessageCircle className="h-12 w-12 text-indigo-600" />
+            <div className="w-16 h-16 bg-gradient-to-br from-blue-600 to-purple-600 rounded-2xl flex items-center justify-center shadow-lg">
+              <MessageCircle className="h-8 w-8 text-white" />
+            </div>
           </div>
-          <h1 className="text-3xl font-bold text-gray-900">Welcome Back</h1>
+          <h1 className="text-3xl font-bold bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent">Welcome Back</h1>
           <p className="text-gray-600 mt-2">Sign in to continue chatting</p>
         </div>
 
@@ -104,7 +113,7 @@ const Login: React.FC<LoginProps> = ({ onLogin, onSwitchToRegister }) => {
           <button
             type="submit"
             disabled={loading}
-            className="w-full bg-indigo-600 text-white py-3 px-4 rounded-lg hover:bg-indigo-700 focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+            className="w-full bg-gradient-to-r from-blue-600 to-purple-600 text-white py-3 px-4 rounded-lg hover:shadow-lg hover:shadow-purple-500/50 transform hover:scale-105 focus:ring-2 focus:ring-purple-500 focus:ring-offset-2 transition-all duration-300 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:scale-100 flex items-center justify-center gap-2"
           >
             {loading ? (
               <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white"></div>
@@ -122,13 +131,37 @@ const Login: React.FC<LoginProps> = ({ onLogin, onSwitchToRegister }) => {
             Don't have an account?{' '}
             <button
               onClick={onSwitchToRegister}
-              className="text-indigo-600 hover:text-indigo-700 font-medium transition-colors"
+              className="text-purple-600 hover:text-purple-700 font-medium transition-colors"
             >
               Sign up
             </button>
           </p>
         </div>
       </div>
+
+      {/* Custom Animations */}
+      <style>{`
+        @keyframes blob {
+          0%, 100% {
+            transform: translate(0px, 0px) scale(1);
+          }
+          33% {
+            transform: translate(30px, -50px) scale(1.1);
+          }
+          66% {
+            transform: translate(-20px, 20px) scale(0.9);
+          }
+        }
+        .animate-blob {
+          animation: blob 7s infinite;
+        }
+        .animation-delay-2000 {
+          animation-delay: 2s;
+        }
+        .animation-delay-4000 {
+          animation-delay: 4s;
+        }
+      `}</style>
     </div>
   );
 };

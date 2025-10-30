@@ -1,10 +1,11 @@
 import { useState, useEffect } from 'react';
+import Home from './pages/Home';
 import Login from './pages/Login';
 import Register from './pages/Register';
 import Chat from './pages/Chat';
 import ChatTest from './pages/ChatTest';
 
-type Page = 'login' | 'register' | 'chat' | 'test';
+type Page = 'home' | 'login' | 'register' | 'chat' | 'test';
 
 interface User {
   id: string;
@@ -13,7 +14,7 @@ interface User {
 }
 
 function App() {
-  const [currentPage, setCurrentPage] = useState<Page>('login');
+  const [currentPage, setCurrentPage] = useState<Page>('home');
   const [user, setUser] = useState<User | null>(null);
 
   useEffect(() => {
@@ -49,6 +50,8 @@ function App() {
 
   const renderPage = () => {
     switch (currentPage) {
+      case 'home':
+        return <Home onGetStarted={() => setCurrentPage('login')} />;
       case 'test':
         return <ChatTest />;
       case 'login':
@@ -66,14 +69,14 @@ function App() {
           />
         );
       case 'chat':
-        return user ? <Chat user={user} onLogout={handleLogout} /> : <Login onLogin={handleLogin} onSwitchToRegister={() => setCurrentPage('register')} />;
+        return user ? <Chat user={user} onLogout={handleLogout} /> : <Home onGetStarted={() => setCurrentPage('login')} />;
       default:
-        return <Login onLogin={handleLogin} onSwitchToRegister={() => setCurrentPage('register')} />;
+        return <Home onGetStarted={() => setCurrentPage('login')} />;
     }
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100">
+    <div className="min-h-screen">
       {renderPage()}
     </div>
   );
