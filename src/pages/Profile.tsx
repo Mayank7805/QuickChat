@@ -55,7 +55,7 @@ const Profile: React.FC<ProfileProps> = ({ user, onClose, onUpdateProfile }) => 
     setError('');
 
     try {
-      const response = await fetch('http://localhost:5001/api/users/profile', {
+      const response = await fetch(`${import.meta.env.VITE_SERVER_URL || 'http://localhost:5001'}/api/users/profile`, {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',

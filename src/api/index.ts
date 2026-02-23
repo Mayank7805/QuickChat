@@ -1,6 +1,6 @@
 import { Friend, FriendRequest, Message, ChatData } from '../types';
 
-const API_BASE_URL = 'http://localhost:5001/api';
+const API_BASE_URL = import.meta.env.VITE_SERVER_URL ? `${import.meta.env.VITE_SERVER_URL}/api` : 'http://localhost:5001/api';
 
 interface APIOptions extends RequestInit {
   headers?: Record<string, string>;

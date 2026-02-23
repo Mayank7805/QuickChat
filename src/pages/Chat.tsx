@@ -109,7 +109,7 @@ const Chat: React.FC<ChatProps> = ({ user, onLogout }) => {
   };
 
   const initializeSocket = () => {
-    const newSocket = io('http://localhost:5001', {
+    const newSocket = io(import.meta.env.VITE_SERVER_URL || 'http://localhost:5001', {
       auth: { token: localStorage.getItem('token') },
       reconnection: true,
       reconnectionDelay: 1000,
@@ -493,7 +493,7 @@ const Chat: React.FC<ChatProps> = ({ user, onLogout }) => {
     };
 
     try {
-      const response = await fetch(`http://localhost:5001/api/messages/chat/${activeChat._id}/message`, {
+      const response = await fetch(`${import.meta.env.VITE_SERVER_URL || 'http://localhost:5001'}/api/messages/chat/${activeChat._id}/message`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
