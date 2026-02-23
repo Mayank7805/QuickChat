@@ -1,5 +1,5 @@
 // api/index.js
-const API_BASE_URL = 'http://localhost:5001/api';
+const API_BASE_URL = import.meta.env.VITE_SERVER_URL ? `${import.meta.env.VITE_SERVER_URL}/api` : 'http://localhost:5001/api';
 
 // Helper function to make API calls
 const apiCall = async (endpoint, options = {}) => {
