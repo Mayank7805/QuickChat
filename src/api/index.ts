@@ -1,6 +1,7 @@
 import { Friend, FriendRequest, Message, ChatData } from '../types';
 
-const API_BASE_URL = '/api';
+const BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:5001';
+const API_BASE_URL = `${BASE_URL}/api`;
 
 interface APIOptions extends RequestInit {
   headers?: Record<string, string>;
@@ -29,6 +30,12 @@ const apiCall = async <T>(endpoint: string, options: APIOptions = {}): Promise<T
 
   try {
     const response = await fetch(url, config);
+    
+    const contentType = response.headers.get("content-type");
+    if (!contentType || !contentType.includes("application/json")) {
+      throw new Error("Server is not responding correctly. Please try again later.");
+    }
+    
     const data = await response.json();
     
     if (!response.ok) {
