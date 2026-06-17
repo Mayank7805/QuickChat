@@ -3,9 +3,8 @@ import Home from './pages/Home';
 import Login from './pages/Login';
 import Register from './pages/Register';
 import Chat from './pages/Chat';
-import ChatTest from './pages/ChatTest';
 
-type Page = 'home' | 'login' | 'register' | 'chat' | 'test';
+type Page = 'home' | 'login' | 'register' | 'chat';
 
 interface User {
   id: string;
@@ -52,8 +51,6 @@ function App() {
     switch (currentPage) {
       case 'home':
         return <Home onGetStarted={() => setCurrentPage('login')} />;
-      case 'test':
-        return <ChatTest />;
       case 'login':
         return (
           <Login 

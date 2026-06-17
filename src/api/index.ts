@@ -1,6 +1,6 @@
 import { Friend, FriendRequest, Message, ChatData } from '../types';
 
-const API_BASE_URL = 'http://localhost:5001/api';
+const API_BASE_URL = '/api';
 
 interface APIOptions extends RequestInit {
   headers?: Record<string, string>;
@@ -50,6 +50,9 @@ interface AuthResponse {
     username: string;
     displayName: string;
   };
+  success?: boolean;
+  message?: string;
+  needsVerification?: boolean;
 }
 
 interface UserData {

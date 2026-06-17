@@ -64,9 +64,16 @@ const Login: React.FC<LoginProps> = ({ onLogin, onSwitchToRegister }) => {
         </div>
 
         {error && (
-          <div className="bg-red-50 border border-red-200 rounded-lg p-3 mb-6">
-            <p className="text-red-600 text-sm">{error}</p>
-          </div>
+          error.toLowerCase().includes('verify your email') ? (
+            <div className="bg-amber-50 border border-amber-300 rounded-lg p-4 mb-6">
+              <p className="text-amber-800 text-sm font-medium">⚠️ {error}</p>
+              <p className="text-amber-600 text-xs mt-1">Check your inbox (and spam folder) for the verification link.</p>
+            </div>
+          ) : (
+            <div className="bg-red-50 border border-red-200 rounded-lg p-3 mb-6">
+              <p className="text-red-600 text-sm">{error}</p>
+            </div>
+          )
         )}
 
         <form onSubmit={handleSubmit} className="space-y-6">
