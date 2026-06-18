@@ -274,7 +274,7 @@ const PORT = process.env.PORT || 5001;
 const MONGODB_URI = process.env.MONGODB_URI || 'mongodb://127.0.0.1:27017/quickchat';
 
 console.log('🚀 Starting server...');
-console.log('📊 MongoDB URI:', MONGODB_URI);
+console.log('📊 MongoDB URI:', MONGODB_URI.replace(/\/\/([^:]+):([^@]+)@/, '//***:***@'));
 console.log('🌐 Port:', PORT);
 
 // Connect to MongoDB

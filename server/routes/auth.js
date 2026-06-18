@@ -20,7 +20,8 @@ const transporter = nodemailer.createTransport({
 
 // Helper: send verification email
 const sendVerificationEmail = async (email, token) => {
-  const verificationUrl = `http://localhost:5001/api/auth/verify-email?token=${token}`;
+  const serverUrl = process.env.SERVER_URL || 'http://localhost:5001';
+  const verificationUrl = `${serverUrl}/api/auth/verify-email?token=${token}`;
 
   const mailOptions = {
     from: `"QuickChat" <${process.env.EMAIL_USER}>`,
@@ -220,7 +221,7 @@ router.get('/verify-email', async (req, res) => {
           <div style="font-size:48px;margin-bottom:16px;">🎉</div>
           <h1 style="background:linear-gradient(135deg,#2563eb,#7c3aed);-webkit-background-clip:text;-webkit-text-fill-color:transparent;margin:0 0 8px;">Email Verified!</h1>
           <p style="color:#64748b;margin:0 0 24px;">Your QuickChat account is now verified.</p>
-          <a href="http://localhost:5173" style="display:inline-block;padding:12px 32px;background:linear-gradient(135deg,#2563eb,#7c3aed);color:white;text-decoration:none;border-radius:10px;font-weight:600;">
+          <a href="${process.env.CLIENT_URL || 'http://localhost:5173'}" style="display:inline-block;padding:12px 32px;background:linear-gradient(135deg,#2563eb,#7c3aed);color:white;text-decoration:none;border-radius:10px;font-weight:600;">
             Go to QuickChat →
           </a>
         </div>
