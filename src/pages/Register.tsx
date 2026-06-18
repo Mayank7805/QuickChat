@@ -16,7 +16,6 @@ const Register: React.FC<RegisterProps> = ({ onRegister, onSwitchToLogin }) => {
     confirmPassword: ''
   });
   const [error, setError] = useState('');
-  const [successMessage, setSuccessMessage] = useState('');
   const [loading, setLoading] = useState(false);
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -29,7 +28,6 @@ const Register: React.FC<RegisterProps> = ({ onRegister, onSwitchToLogin }) => {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
-    setSuccessMessage('');
 
     if (formData.password !== formData.confirmPassword) {
       setError('Passwords do not match');
@@ -46,14 +44,7 @@ const Register: React.FC<RegisterProps> = ({ onRegister, onSwitchToLogin }) => {
     try {
       const { confirmPassword, ...registerData } = formData;
       const response = await authAPI.register(registerData);
-
-      // If the server indicates email verification is needed, show the message
-      if (response.needsVerification) {
-        setSuccessMessage(response.message || 'Account created! Please check your email to verify your account before logging in.');
-      } else {
-        // Fallback: if server returns a token (e.g. verification disabled), proceed as before
-        onRegister(response.token, response.user);
-      }
+      onRegister(response.token, response.user);
     } catch (err: any) {
       setError(err.message || 'Registration failed');
     } finally {
@@ -84,18 +75,6 @@ const Register: React.FC<RegisterProps> = ({ onRegister, onSwitchToLogin }) => {
         {error && (
           <div className="bg-red-50 border border-red-200 rounded-lg p-3 mb-6">
             <p className="text-red-600 text-sm">{error}</p>
-          </div>
-        )}
-
-        {successMessage && (
-          <div className="bg-green-50 border border-green-200 rounded-lg p-4 mb-6">
-            <p className="text-green-700 text-sm font-medium">✅ {successMessage}</p>
-            <button
-              onClick={onSwitchToLogin}
-              className="mt-3 text-sm text-purple-600 hover:text-purple-700 font-medium underline transition-colors"
-            >
-              Go to Sign In →
-            </button>
           </div>
         )}
 
